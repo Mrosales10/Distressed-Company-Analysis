@@ -1,0 +1,85 @@
+import pandas as pd
+import yfinance as yf
+import numpy as np
+
+# Function to fetch financial data for a given stock ticker
+def get_financial_data(ticker):
+    """
+    This function retrieves financial statements for a given company using Yahoo Finance.
+    It fetches the balance sheet, income statement, and cash flow statement.
+    
+    Parameters:
+    ticker (str): The stock ticker symbol of the company.
+    
+    Returns:
+    tuple: Contains balance sheet, income statement, and cash flow statement as Pandas DataFrames.
+    """
+    stock = yf.Ticker(ticker)
+    balance_sheet = stock.balance_sheet
+    income_statement = stock.financials
+    cash_flow = stock.cashflow
+    return balance_sheet, income_statement, cash_flow
+
+# Function to calculate the Altman Z-Score for financial distress analysis
+def calculate_altman_z_score(balance_sheet, income_statement, ticker):
+    """
+    This function calculates the Altman Z-Score, which is used to determine the financial distress level of a company.
+    The Z-Score is a weighted sum of various financial ratios that predict the likelihood of bankruptcy.
+    
+    Parameters:
+    balance_sheet (DataFrame): The company's balance sheet data.
+    income_statement (DataFrame): The company's income statement data.
+    ticker (str): The stock ticker symbol of the company.
+    
+    Returns:
+    float or str: The calculated Z-Score or an error message if unable to compute.
+    """
+    try:
+        total_assets = balance_sheet.loc['Total Assets'][0]
+        total_liabilities = balance_sheet.loc['Total Liabilities Net Minority Interest'][0]
+        working_capital = balance_sheet.loc['Total Current Assets'][0] - balance_sheet.loc['Total Current Liabilities'][0]
+        retained_earnings = balance_sheet.loc['Retained Earnings'][0]
+        ebit = income_statement.loc['EBIT'][0]
+        market_value_equity = balance_sheet.loc['Ordinary Shares Number'][0] * yf.Ticker(ticker).history(period='1d')['Close'][0]
+        sales = income_statement.loc['Total Revenue'][0]
+        
+        # The Altman Z-Score formula
+        z_score = (1.2 * (working_capital / total_assets) +
+                   1.4 * (retained_earnings / total_assets) +
+                   3.3 * (ebit / total_assets) +
+                   0.6 * (market_value_equity / total_liabilities) +
+                   1.0 * (sales / total_assets))
+        
+        return z_score
+    except Exception as e:
+        return f"Error calculating Z-score: {e}"
+
+# Function to analyze a company's financial distress risk based on the Altman Z-Score
+def analyze_distress(ticker):
+    """
+    This function fetches a company's financial data, calculates the Altman Z-Score, and determines financial distress risk.
+    
+    Parameters:
+    ticker (str): The stock ticker symbol of the company.
+    
+    Returns:
+    str: A message indicating the company's financial status based on the Z-Score.
+    """
+    balance_sheet, income_statement, _ = get_financial_data(ticker)
+    z_score = calculate_altman_z_score(balance_sheet, income_statement, ticker)
+    
+    if isinstance(z_score, str):
+        return z_score
+    
+    # Interpretation of Z-Score results
+    status = "Low Risk" if z_score > 2.99 else "Moderate Risk" if 1.81 < z_score <= 2.99 else "High Distress Risk"
+    return f"{ticker}: Z-Score = {z_score:.2f}, Financial Status: {status}"
+
+# Example Usage
+if __name__ == '__main__':
+    # List of stock tickers to analyze (you can replace these with any public company tickers)
+    ticker_list = ['AAL', 'CCL', 'TSLA', 'F']  # AAL: American Airlines, CCL: Carnival, TSLA: Tesla, F: Ford
+    
+    print("Analyzing financial distress risk for the following companies:")
+    for ticker in ticker_list:
+        print(analyze_distress(ticker))
